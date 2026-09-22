@@ -24,7 +24,7 @@ mb_internal_encoding('UTF-8');
 $SITE = 'Kurage 質問主意書アシスト';
 $SELF = '/kshuisho.php';
 $OGP  = 'https://kurage.exbridge.jp/images/ogp/kshuisho.png';
-$STORE = 'https://kappstore.exbridge.jp/?ref=kshuisho';   // 出品後に app.php?id=… へ差し替える
+$STORE = 'https://kappstore.exbridge.jp/app.php?id=9701841975d2ed6a&ref=kshuisho';
 $DBP  = __DIR__ . '/kshuisho_data/kshuisho.sqlite';
 $PATTERNS = array(
     '困難'   => array('お答えすることは困難', '「お答えすることは困難である」「困難である」と書いてある答弁'),
