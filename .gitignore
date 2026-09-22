@@ -1,0 +1,15 @@
+*.env
+.env.*
+*.bak
+*.bak-*
+data/*.csv
+data/*.zip
+data/*.sqlite
+data/*.sqlite-*
+outputs/
+php/kshuisho_data/*.sqlite*
+php/kshuisho_data/geo/
+store/apps_*.json
+pv/apps_backup_*.json
+__pycache__/
+pv/apps_backup_*.json
