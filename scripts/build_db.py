@@ -129,7 +129,7 @@ def shugiin(session_dir: str) -> list[dict]:
             a_text = "\n".join(body).strip()
         rows.append({
             "id": f"shu-{session}-{no}", "house": "衆議院", "session": session, "no": no,
-            "title": kv.get("質問件名", ""), "submitter": kv.get("提出者名", "").rstrip("君").replace("　", " ").strip(),
+            "title": kv.get("質問件名", ""), "submitter": re.sub(r"\s+", " ", kv.get("提出者名", "").rstrip("君").replace("　", " ")).strip(),
             "kaiha": kv.get("会派名", ""), "session_kind": kv.get("国会区別", ""),
             "submit_date": wareki(kv.get("質問主意書提出年月日", "")), "transfer_date": wareki(kv.get("内閣転送年月日", "")),
             "answer_date": wareki(kv.get("答弁書受領年月日", "")), "status": kv.get("経過状況", ""),
@@ -176,7 +176,7 @@ def sangiin(session_dir: str) -> list[dict]:
                 a_text = "\n".join(body[:j] if j is not None else body).strip()
         rows.append({
             "id": f"san-{session}-{no}", "house": "参議院", "session": session, "no": no,
-            "title": kv.get("件名", ""), "submitter": kv.get("提出者", "").rstrip("君").replace("　", " ").strip(),
+            "title": kv.get("件名", ""), "submitter": re.sub(r"\s+", " ", kv.get("提出者", "").rstrip("君").replace("　", " ")).strip(),
             "kaiha": "", "session_kind": "",
             "submit_date": wareki(kv.get("提出日", "")), "transfer_date": wareki(kv.get("転送日", "")),
             "answer_date": wareki(kv.get("答弁書受領日", "")), "status": "答弁受理" if a_text else "",
