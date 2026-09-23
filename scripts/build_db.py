@@ -45,6 +45,14 @@ KANJI = {"〇": 0, "零": 0, "一": 1, "二": 2, "三": 3, "四": 4, "五": 5, "
 ERA = {"令和": 2018, "平成": 1988, "昭和": 1925}
 
 
+def norm_name(s: str) -> str:
+    """提出者名を揃える。
+    古い会期は「櫻内義雄君外二名」のように連名で、末尾が「名」なので rstrip("君") が効かない
+    （第1〜147回の衆議院に18件。2026-09-23 実測）。「君外」を「 外」に直してから落とす。
+    全角空白は半角に、連続空白は1つに。"""
+    return re.sub(r"\s+", " ", (s or "").replace("君外", " 外").rstrip("君").replace("　", " ")).strip()
+
+
 def kan2int(s: str) -> int | None:
     s = s.strip()
     if s.isdigit():
@@ -130,7 +138,7 @@ def shugiin(session_dir: str) -> list[dict]:
             a_text = "\n".join(body).strip()
         rows.append({
             "id": f"shu-{session}-{no}", "house": "衆議院", "session": session, "no": no,
-            "title": kv.get("質問件名", ""), "submitter": re.sub(r"\s+", " ", kv.get("提出者名", "").rstrip("君").replace("　", " ")).strip(),
+            "title": kv.get("質問件名", ""), "submitter": norm_name(kv.get("提出者名", "")),
             "kaiha": kv.get("会派名", ""), "session_kind": kv.get("国会区別", ""),
             "submit_date": wareki(kv.get("質問主意書提出年月日", "")), "transfer_date": wareki(kv.get("内閣転送年月日", "")),
             "answer_date": wareki(kv.get("答弁書受領年月日", "")), "status": kv.get("経過状況", ""),
@@ -177,7 +185,7 @@ def sangiin(session_dir: str) -> list[dict]:
                 a_text = "\n".join(body[:j] if j is not None else body).strip()
         rows.append({
             "id": f"san-{session}-{no}", "house": "参議院", "session": session, "no": no,
-            "title": kv.get("件名", ""), "submitter": re.sub(r"\s+", " ", kv.get("提出者", "").rstrip("君").replace("　", " ")).strip(),
+            "title": kv.get("件名", ""), "submitter": norm_name(kv.get("提出者", "")),
             "kaiha": "", "session_kind": "",
             "submit_date": wareki(kv.get("提出日", "")), "transfer_date": wareki(kv.get("転送日", "")),
             "answer_date": wareki(kv.get("答弁書受領日", "")), "status": "答弁受理" if a_text else "",
