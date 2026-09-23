@@ -98,7 +98,8 @@ def between(lines: list[str], start_pred, end_pred) -> list[str]:
 def shugiin(session_dir: str) -> list[dict]:
     session = int(os.path.basename(session_dir))
     rows = []
-    for p in sorted(glob.glob(os.path.join(session_dir, f"{session}[0-9][0-9][0-9].htm"))):
+    # ファイル名の会期は3桁ゼロ詰め（第1回= 001001.htm）。ディレクトリ名は "1" なので合わせる
+    for p in sorted(glob.glob(os.path.join(session_dir, f"{session:03d}[0-9][0-9][0-9].htm"))):
         base = os.path.basename(p)[:-4]
         no = int(base[-3:])
         L = text_lines(open(p, encoding="utf-8").read())
@@ -143,7 +144,7 @@ def shugiin(session_dir: str) -> list[dict]:
 def sangiin(session_dir: str) -> list[dict]:
     session = int(os.path.basename(session_dir))
     rows = []
-    for p in sorted(glob.glob(os.path.join(session_dir, f"m{session}[0-9][0-9][0-9].htm"))):
+    for p in sorted(glob.glob(os.path.join(session_dir, f"m{session:03d}[0-9][0-9][0-9].htm"))):
         base = os.path.basename(p)[1:-4]
         no = int(base[-3:])
         L = text_lines(open(p, encoding="utf-8").read())
@@ -193,9 +194,12 @@ def evasive(a_text: str) -> dict:
 
 def main() -> int:
     rows = []
-    for d in sorted(glob.glob(os.path.join(RAW, "shugiin", "*"))):
+    def sess_dirs(house):
+        ds = [d for d in glob.glob(os.path.join(RAW, house, "*")) if os.path.basename(d).isdigit()]
+        return sorted(ds, key=lambda d: int(os.path.basename(d)))   # 文字列順だと第10回が第2回より前に来る
+    for d in sess_dirs("shugiin"):
         rows += shugiin(d)
-    for d in sorted(glob.glob(os.path.join(RAW, "sangiin", "*"))):
+    for d in sess_dirs("sangiin"):
         rows += sangiin(d)
     os.makedirs(os.path.dirname(OUT), exist_ok=True)
     if os.path.exists(OUT):
@@ -226,6 +230,9 @@ def main() -> int:
             "built": __import__("datetime").date.today().isoformat()}
     db.executemany("INSERT INTO meta VALUES (?,?)", list(meta.items()))
     db.commit()
+    # 行を入れたあとのファイルは実データの3倍ほどに膨らむ。VACUUM すると実サイズに戻る
+    # （2,167件のとき 20.2MB → 実データ 6.6MB。全会期だと効きが大きい）
+    db.execute("VACUUM")
     bad = [r["id"] for r in rows if not r["title"] or (r["a_url"] and not r["a_text"]) or not r["q_text"]]
     print(f"→ {OUT} 質問 {n}件（答弁あり {na}） 期間 {smin}〜{smax}")
     if bad:

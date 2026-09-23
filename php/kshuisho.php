@@ -52,10 +52,39 @@ $path = $path === '/' ? '' : $path;
 
 // ── 検索 ───────────────────────────────────────────────
 function terms($q) { $q = trim(preg_replace('/[\s　]+/u', ' ', (string)$q)); return $q === '' ? array() : array_slice(array_unique(explode(' ', $q)), 0, 5); }
-function search($db, $q, $limit = 200) {
-    $ts = terms($q); if (!$ts) return array();
+
+/** 絞り込み条件を $_GET から。値は必ずここで検めてから SQL に渡す。 */
+function get_filters() {
+    global $PATTERNS;
+    $house = (string)($_GET['house'] ?? '');
+    $pat = (string)($_GET['pat'] ?? '');
+    return array(
+        'house'   => ($house === '衆議院' || $house === '参議院') ? $house : '',
+        'session' => max(0, (int)($_GET['session'] ?? 0)),
+        'giin'    => trim((string)($_GET['giin'] ?? '')),
+        'pat'     => isset($PATTERNS[$pat]) ? $pat : '',
+        'ans'     => (($_GET['ans'] ?? '') === '1') ? '1' : '',
+    );
+}
+function has_filters($f) { return $f['house'] || $f['session'] || $f['giin'] !== '' || $f['pat'] || $f['ans']; }
+/** 絞り込みを URL のクエリに戻す（$q を差し替えられる） */
+function filter_qs($f, $q = null) {
+    $p = array();
+    if ($q !== null && $q !== '') $p['q'] = $q;
+    foreach (array('house', 'session', 'giin', 'pat', 'ans') as $k) { if (!empty($f[$k])) $p[$k] = $f[$k]; }
+    return $p ? '?' . http_build_query($p) : '';
+}
+/** ことば（AND）と絞り込みの両方で引く。どちらも無ければ何も返さない。 */
+function search($db, $q, $limit = 200, $f = null) {
+    $ts = terms($q); $f = $f ?: array('house' => '', 'session' => 0, 'giin' => '', 'pat' => '', 'ans' => '');
     $w = array(); $a = array();
     foreach ($ts as $t) { $w[] = '(title LIKE ? OR q_text LIKE ? OR a_text LIKE ?)'; $a[] = "%$t%"; $a[] = "%$t%"; $a[] = "%$t%"; }
+    if ($f['house'])        { $w[] = 'house = ?';            $a[] = $f['house']; }
+    if ($f['session'])      { $w[] = 'session = ?';          $a[] = (int)$f['session']; }
+    if ($f['giin'] !== '')  { $w[] = 'submitter LIKE ?';     $a[] = '%' . $f['giin'] . '%'; }
+    if ($f['pat'])          { $w[] = 'evasive_json LIKE ?';  $a[] = '%"' . $f['pat'] . '"%'; }
+    if ($f['ans'])          { $w[] = 'a_len > 0'; }
+    if (!$w) return array();
     $st = $db->prepare('SELECT id, house, session, no, title, submitter, kaiha, submit_date, answer_date, status, evasive_json, a_len, q_text, a_text FROM q WHERE ' . implode(' AND ', $w) . ' ORDER BY submit_date DESC LIMIT ' . (int)$limit);
     $st->execute($a); return $st->fetchAll();
 }
@@ -84,7 +113,7 @@ function head_html($title, $desc, $canon, $ld_extra = null) {
        . '.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0;min-width:0}'
        . '.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:12px}.card{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff;min-width:0}'
        . '.card .k{font-size:12px;color:var(--mut)}.card .v{font-size:22px;font-weight:800;margin-top:4px}.card .s{font-size:12px;color:var(--mut);margin-top:4px}'
-       . '.form{display:flex;gap:10px;flex-wrap:wrap;align-items:center}input[type=text]{flex:1 1 260px;min-width:0;font-size:17px;padding:12px 14px;border:2px solid var(--line);border-radius:10px}'
+       . '.form{display:flex;gap:10px;flex-wrap:wrap;align-items:center}.fp{margin:0 0 18px}.fr{display:flex;gap:10px 14px;flex-wrap:wrap;align-items:center;margin-top:10px;padding:12px 14px;background:#fff;border:1px solid var(--line);border-radius:10px}.fr label{font-size:13px;color:var(--mut);font-weight:700;display:flex;gap:6px;align-items:center}.fr select,.fr input[type=text]{font:inherit;font-size:15px;font-weight:400;color:var(--ink);padding:7px 9px;border:1px solid var(--line);border-radius:8px;background:#fff;max-width:100%;flex:0 1 auto;min-width:0}.fr label.cb{font-weight:400;font-size:14px}.fr .btn{padding:8px 16px;font-size:15px}.nf{margin:0 0 18px}input[type=text]{flex:1 1 260px;min-width:0;font-size:17px;padding:12px 14px;border:2px solid var(--line);border-radius:10px}'
        . '.btn{display:inline-block;background:var(--teal);color:#fff;border:0;border-radius:10px;padding:12px 20px;font:inherit;font-weight:700;text-decoration:none;cursor:pointer}.btn.ghost{background:#fff;color:var(--teal-d);border:1px solid var(--line)}'
        . '.src{font-size:12.5px;color:var(--mut);line-height:1.8}.tscroll{overflow-x:auto}table.t{width:100%;border-collapse:collapse;font-size:14px;min-width:460px}table.t th,table.t td{border-bottom:1px solid var(--line);padding:8px 10px;text-align:left;vertical-align:top}table.t th{color:var(--mut);font-size:12px}td.n,th.n{text-align:right;font-variant-numeric:tabular-nums}'
        . '.q{border:1px solid var(--line);border-radius:12px;padding:14px;background:#fff;margin:10px 0;min-width:0}.q .nm{font-weight:700;font-size:17px;line-height:1.5}.q .meta{font-size:13.5px;color:var(--mut);margin-top:4px}.q .sn{font-size:14px;margin-top:8px;color:#334}'
@@ -125,6 +154,52 @@ function foot_html() {
 function search_form($q = '', $action = '/search', $ph = 'ことばで探す（例: 遺族年金 養育費、土砂災害 警戒区域）') {
     global $SELF;
     echo '<form class="form" method="get" action="' . h($SELF . $action) . '"><input type="text" name="q" value="' . h($q) . '" placeholder="' . h($ph) . '" aria-label="検索語"><button class="btn" type="submit">探す</button></form>';
+}
+/** ことば＋会期・提出者・院・型をひとつのフォームにまとめた絞り込み。
+ *  吉田はるみ議員が第212回の質問主意書(shu-212-141)で政府に求めたのがこの形。 */
+function filter_panel($db, $q, $f, $action = '/search') {
+    global $SELF, $PATTERNS;
+    static $sessions = null, $houses = null;
+    if ($sessions === null) {
+        $sessions = $db->query('SELECT session, min(substr(submit_date,1,4)) y, count(*) n FROM q GROUP BY session ORDER BY session DESC')->fetchAll();
+        $houses = $db->query('SELECT house, count(*) n FROM q GROUP BY house ORDER BY house')->fetchAll();
+    }
+    echo '<form class="fp" method="get" action="' . h($SELF . $action) . '">';
+    echo '<div class="form"><input type="text" name="q" value="' . h($q) . '" placeholder="ことばで探す（例: 遺族年金 養育費）" aria-label="検索語"><button class="btn" type="submit">探す</button></div>';
+    echo '<div class="fr">';
+    echo '<label>院 <select name="house"><option value="">衆参どちらも</option>';
+    foreach ($houses as $r) { echo '<option value="' . h($r['house']) . '"' . ($f['house'] === $r['house'] ? ' selected' : '') . '>' . h($r['house']) . '（' . n($r['n']) . '）</option>'; }
+    echo '</select></label>';
+    echo '<label>会期 <select name="session"><option value="">すべての会期</option>';
+    foreach ($sessions as $r) { echo '<option value="' . (int)$r['session'] . '"' . ((int)$f['session'] === (int)$r['session'] ? ' selected' : '') . '>第' . (int)$r['session'] . '回' . ($r['y'] ? '（' . h($r['y']) . '年）' : '') . '</option>'; }
+    echo '</select></label>';
+    echo '<label>提出者 <input type="text" name="giin" value="' . h($f['giin']) . '" placeholder="名字だけでも" size="10"></label>';
+    echo '<label>答弁の型 <select name="pat"><option value="">問わない</option>';
+    foreach ($PATTERNS as $k => $d) { echo '<option value="' . h($k) . '"' . ($f['pat'] === $k ? ' selected' : '') . '>' . h($d[0]) . '</option>'; }
+    echo '</select></label>';
+    echo '<label class="cb"><input type="checkbox" name="ans" value="1"' . ($f['ans'] ? ' checked' : '') . '> 答弁書があるものだけ</label>';
+    echo '<button class="btn ghost" type="submit">絞り込む</button>';
+    if (has_filters($f) || $q !== '') echo '<a class="btn ghost" href="' . h($SELF . '/search') . '">条件を消す</a>';
+    echo '</div></form>';
+}
+/** 一覧ページ（提出者・会期・型）から、その条件を保ったまま本文をことばで引く小さなフォーム */
+function narrow_form($fixed, $note) {
+    global $SELF;
+    echo '<form class="form nf" method="get" action="' . h($SELF . '/search') . '">';
+    foreach ($fixed as $k => $v) { echo '<input type="hidden" name="' . h($k) . '" value="' . h($v) . '">'; }
+    echo '<input type="text" name="q" placeholder="' . h($note) . '" aria-label="' . h($note) . '"><button class="btn" type="submit">この中を探す</button></form>';
+}
+/** いま効いている条件を日本語の1行に */
+function filter_words($q, $f) {
+    global $PATTERNS;
+    $w = array();
+    if ($q !== '') $w[] = '「' . $q . '」を含む';
+    if ($f['house']) $w[] = $f['house'];
+    if ($f['session']) $w[] = '第' . (int)$f['session'] . '回国会';
+    if ($f['giin'] !== '') $w[] = '提出者に「' . $f['giin'] . '」';
+    if ($f['pat']) $w[] = '答弁に「' . $PATTERNS[$f['pat']][0] . '」';
+    if ($f['ans']) $w[] = '答弁書あり';
+    return implode('・', $w);
 }
 function tags($r) {
     global $PATTERNS, $SELF;
@@ -208,7 +283,8 @@ if (preg_match('#^/giin/(.+)$#', $path, $m)) {
     $st = $db->prepare('SELECT id, house, session, no, title, submitter, kaiha, submit_date, answer_date, status, evasive_json, a_len, q_text, a_text FROM q WHERE submitter=? ORDER BY submit_date DESC'); $st->execute(array($m[1])); $rows = $st->fetchAll();
     if (!$rows) { http_response_code(404); head_html('見つかりません｜' . $SITE, '', '/giin'); echo '<h1>その提出者の質問主意書は収録していません</h1>'; foot_html(); exit; }
     head_html($m[1] . 'の質問主意書' . count($rows) . '件と政府答弁書｜' . $SITE, $m[1] . '（' . $rows[0]['house'] . ($rows[0]['kaiha'] ? '・' . $rows[0]['kaiha'] : '') . '）が提出した質問主意書' . count($rows) . '件を、提出日・件名・答弁の型つきで並べました。', '/giin/' . rawurlencode($m[1]));
-    echo '<h1>' . h($m[1]) . 'の質問主意書</h1><p class="lead">' . h($rows[0]['house']) . ($rows[0]['kaiha'] ? '・' . h($rows[0]['kaiha']) : '') . '。' . count($rows) . '件。新しい順。</p>';
+    echo '<h1>' . h($m[1]) . 'の質問主意書</h1><p class="lead">' . h($rows[0]['house']) . ($rows[0]['kaiha'] ? '・' . h($rows[0]['kaiha']) : '') . '。' . n(count($rows)) . '件。新しい順。</p>';
+    narrow_form(array('giin' => $m[1]), $m[1] . 'の質問主意書の中を、ことばで探す');
     foreach ($rows as $r) q_card($r); foot_html(); exit;
 }
 
@@ -224,7 +300,8 @@ if ($path === '/pattern') {
 if (preg_match('#^/pattern/(.+)$#', $path, $m) && isset($PATTERNS[$m[1]])) {
     $k = $m[1]; $st = $db->prepare('SELECT id, house, session, no, title, submitter, kaiha, submit_date, answer_date, status, evasive_json, a_len, q_text, a_text FROM q WHERE evasive_json LIKE ? ORDER BY submit_date DESC LIMIT 300'); $st->execute(array('%"' . $k . '"%')); $rows = $st->fetchAll();
     head_html('「' . $PATTERNS[$k][0] . '」と答えられた質問主意書' . count($rows) . '件｜' . $SITE, $PATTERNS[$k][1] . '。新しい順に' . count($rows) . '件。', '/pattern/' . rawurlencode($k));
-    echo '<h1>「' . h($PATTERNS[$k][0]) . '」の型</h1><p class="lead">' . h($PATTERNS[$k][1]) . '。' . count($rows) . '件（新しい順）。語の一致で、答弁の評価ではありません。</p>';
+    echo '<h1>「' . h($PATTERNS[$k][0]) . '」の型</h1><p class="lead">' . h($PATTERNS[$k][1]) . '。' . n(count($rows)) . '件（新しい順）。語の一致で、答弁の評価ではありません。</p>';
+    narrow_form(array('pat' => $k), 'この型が返った答弁の中を、ことばで探す');
     foreach ($rows as $r) q_card($r); foot_html(); exit;
 }
 
@@ -232,18 +309,29 @@ if (preg_match('#^/pattern/(.+)$#', $path, $m) && isset($PATTERNS[$m[1]])) {
 if (preg_match('#^/session/(衆議院|参議院)/(\d+)$#u', $path, $m)) {
     $st = $db->prepare('SELECT id, house, session, no, title, submitter, kaiha, submit_date, answer_date, status, evasive_json, a_len, q_text, a_text FROM q WHERE house=? AND session=? ORDER BY no'); $st->execute(array($m[1], (int)$m[2])); $rows = $st->fetchAll();
     head_html($m[1] . ' 第' . $m[2] . '回国会の質問主意書' . count($rows) . '件｜' . $SITE, '', '/session/' . $m[1] . '/' . $m[2]);
-    echo '<h1>' . h($m[1]) . ' 第' . (int)$m[2] . '回国会</h1><p class="lead">' . count($rows) . '件。番号順。</p>'; foreach ($rows as $r) q_card($r); foot_html(); exit;
+    echo '<h1>' . h($m[1]) . ' 第' . (int)$m[2] . '回国会</h1><p class="lead">' . n(count($rows)) . '件。番号順。</p>';
+    narrow_form(array('house' => $m[1], 'session' => (int)$m[2]), 'この会期の中を、ことばで探す');
+    foreach ($rows as $r) q_card($r); foot_html(); exit;
 }
 
 // ── 検索 ────────────────────────────────────────────────
 if ($path === '/search') {
-    $q = trim((string)($_GET['q'] ?? '')); $ts = terms($q); $rows = $ts ? search($db, $q) : array();
-    head_html(($q !== '' ? '「' . $q . '」の質問主意書と答弁書 ' . count($rows) . '件' : 'ことばで探す') . '｜' . $SITE, '質問本文・答弁本文・件名から「' . $q . '」を含む質問主意書を並べました。', '/search');
-    echo '<h1>' . ($q !== '' ? '「' . h($q) . '」' : 'ことばで探す') . '</h1>'; search_form($q);
-    if ($q !== '') {
-        echo '<p class="lead">' . count($rows) . '件' . (count($rows) >= 200 ? '（新しい順に200件まで）' : '') . '。質問本文・答弁本文・件名のどれかに全部の語を含むものです。 <a class="btn ghost" href="' . h($SELF . '/assist?q=' . rawurlencode($q)) . '">この論点をアシストで並べる</a></p>';
-        if (!$rows) echo '<div class="panel"><p>その語を含む質問主意書は収録分にありません。語を減らすか、言い換えてみてください（例: 「養育費」だけ）。</p></div>';
+    $q = trim((string)($_GET['q'] ?? '')); $ts = terms($q); $f = get_filters();
+    $on = ($q !== '' || has_filters($f));
+    $rows = $on ? search($db, $q, 200, $f) : array();
+    $words = filter_words($q, $f);
+    head_html(($on ? $words . 'の質問主意書と答弁書 ' . count($rows) . '件' : '衆参の質問主意書をことばで探す') . '｜' . $SITE,
+        ($on ? $words . '質問主意書を、衆議院・参議院あわせて新しい順に並べました。' : '衆議院・参議院の質問主意書と政府答弁書を、本文の中までことばで引けます。会期・提出者・院・答弁の型でも絞れます。'), '/search');
+    echo '<h1>' . ($on ? h($words) : '衆参の質問主意書をことばで探す') . '</h1>';
+    filter_panel($db, $q, $f);
+    if ($on) {
+        echo '<p class="lead">' . n(count($rows)) . '件' . (count($rows) >= 200 ? '（新しい順に200件まで）' : '')
+           . '。' . ($ts ? '質問本文・答弁本文・件名のどれかに全部の語を含み、' : '') . '衆参をまとめて新しい順です。'
+           . ($ts ? ' <a class="btn ghost" href="' . h($SELF . '/assist?q=' . rawurlencode($q)) . '">この論点をアシストで並べる</a>' : '') . '</p>';
+        if (!$rows) echo '<div class="panel"><p>その条件に当たる質問主意書は収録分にありません。語を減らすか、絞り込みを外してみてください。</p></div>';
         foreach ($rows as $r) q_card($r, $ts);
+    } else {
+        echo '<div class="panel"><p>ことばだけでも、会期や提出者だけでも引けます。両方を重ねると「その会期に、その議員が、その論点で」何を聞いたかが出ます。</p></div>';
     }
     foot_html(); exit;
 }

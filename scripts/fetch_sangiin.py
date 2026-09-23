@@ -2,11 +2,12 @@
 # -*- coding: utf-8 -*-
 """参議院「質問主意書」から、会期ごとの一覧・明細（日付）・質問本文・答弁本文を落とす。
 
-  /usr/bin/python3 scripts/fetch_sangiin.py --from 200 --to 221
+  /usr/bin/python3 scripts/fetch_sangiin.py --from 1 --to 221
   /usr/bin/python3 scripts/fetch_sangiin.py --session 221
 
 生HTMLは /mnt/data/kshuisho/raw/sangiin/<会期>/ に置く。
 一覧 syuisyo/<NNN>/syuisyo.htm ／ 明細 meisai/m<NNN><nnn>.htm ／ 質問 syuh/s<NNN><nnn>.htm ／ 答弁 touh/t<NNN><nnn>.htm。
+会期は必ず3桁ゼロ詰め（第1回は 001/meisai/m001001.htm）。第1回(1947年)から同じ形式で置いてある（2026-09-23 実測）。
 UTF-8。1リクエストごとに1秒あける。
 """
 from __future__ import annotations
@@ -48,7 +49,7 @@ def fetch_file(session: int, rel: str, force: bool = False) -> str | None:
     p = os.path.join(d, os.path.basename(rel))
     if os.path.exists(p) and not force:
         return open(p, encoding="utf-8").read()
-    s = get(BASE + f"{session}/" + rel)
+    s = get(BASE + f"{session:03d}/" + rel)
     if s is None:
         return None
     open(p, "w", encoding="utf-8").write(s)
@@ -67,9 +68,9 @@ def main() -> int:
         lst = fetch_file(s, "syuisyo.htm", force=True)
         if not lst:
             print(f"第{s}回: 一覧なし"); continue
-        nos = sorted({int(m) for m in re.findall(r'meisai/m%d(\d{3})\.htm' % s, lst)})
+        nos = sorted({int(m) for m in re.findall(r'meisai/m%03d(\d{3})\.htm' % s, lst)})
         for n in nos:
-            base = f"{s}{n:03d}"
+            base = f"{s:03d}{n:03d}"
             m = fetch_file(s, f"meisai/m{base}.htm")
             if not m:
                 continue
