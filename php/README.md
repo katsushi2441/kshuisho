@@ -28,7 +28,7 @@ images/ogp/kshuisho.png          ← OGP画像
 | URL | 内容 |
 |---|---|
 | `/` | ことばで探す（件名・質問本文・答弁本文） |
-| `/search?q=語` | 検索結果（抜粋つき） |
+| `/search?q=語` | 検索結果（抜粋つき）。`&house=参議院` `&session=217` `&giin=浜田` `&pat=困難` `&ans=1` を重ねて絞れる。ことばが無くても絞り込みだけで引ける |
 | `/assist?q=語` | **アシスト**: 同じ論点の「政府はこう答えている（原文の段落）」「答えていない型が返った質問」「過去の質問」「質問主意書の型（空欄）」 |
 | `/q/{id}` | 質問主意書1件（質問本文・答弁本文・提出日・転送日・受領日・型） |
 | `/giin` `/giin/{名前}` | 提出者ごと |
@@ -42,12 +42,20 @@ images/ogp/kshuisho.png          ← OGP画像
 ## データを新しくする
 
 ```bash
-python3 scripts/fetch_shugiin.py --from 212 --to 221   # 衆議院（会期の範囲）
-python3 scripts/fetch_sangiin.py --from 212 --to 221   # 参議院
-python3 scripts/build_db.py                             # → kshuisho_data/kshuisho.sqlite
+python3 scripts/fetch_shugiin.py --from 1 --to 221   # 衆議院（会期の範囲）
+python3 scripts/fetch_sangiin.py --from 1 --to 221   # 参議院
+python3 scripts/verify_raw.py --delete                # 途中で切れたファイルを消す
+python3 scripts/build_db.py                           # → kshuisho_data/kshuisho.sqlite
 ```
 
-- 生HTMLは `/mnt/data/kshuisho/raw/` に残します（取り直しません）。会期を広げるときは `--from` を小さくします。
+新しい会期を足すだけなら `--from` をその会期にします。全会期をはじめから落とすと、
+1リクエスト1秒なので衆参それぞれ6時間ほどかかります。`scripts/backfill_all.sh` は
+これを衆参で並行に流します（落としたものは取りに行かないので、途中で止めても続きから）。
+
+- 生HTMLは `/mnt/data/kshuisho/raw/` に残します（取り直しません）。
+- **衆議院はデータベースが2つに分かれています。** 第148回以降が `itdb_shitsumon.nsf`、
+  第147回以前が `itdb_shitsumona.nsf`。第1回（1947年）から本文HTMLがあります。
+- **会期は3桁ゼロ詰め**です（`kaiji001_l.htm`。`kaiji1_l.htm` は404）。参議院も同じ。
 - 衆議院は Shift_JIS、参議院は UTF-8。参議院のサイトは User-Agent に製品名が入ると 502 を返すので、素の UA で1秒あけて取ります。
 - 一覧は毎回取り直します（答弁書が後から増えるため）。
 
