@@ -103,6 +103,7 @@ function head_html($title, $desc, $canon, $ld_extra = null) {
     echo '<title>' . h($title) . '</title><meta name="description" content="' . h($desc) . '">';
     echo '<link rel="canonical" href="' . h($base . $canon) . '">';
     echo '<meta property="og:title" content="' . h($title) . '"><meta property="og:description" content="' . h($desc) . '"><meta property="og:type" content="website"><meta property="og:image" content="' . h($OGP) . '"><meta property="og:site_name" content="' . h($SITE) . '"><meta property="og:url" content="' . h($base . $canon) . '">';
+    echo '<meta property="og:locale" content="ja_JP">';
     echo '<meta name="twitter:card" content="summary_large_image"><meta name="twitter:image" content="' . h($OGP) . '">';
     echo '<style>'
        . ':root{--ink:#12202f;--mut:#5d6b7a;--teal:#0a9a8f;--teal-d:#087f76;--line:#dfe7ec;--bg:#f5f8fa;--red-l:#fdecea;--amber-l:#fdf6e3;--blue:#2c6fbb;--blue-l:#eaf2fb}'
