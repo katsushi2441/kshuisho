@@ -141,6 +141,8 @@ function head_html($title, $desc, $canon, $ld_extra = null) {
     );
     if ($ld_extra) { $graph[] = $ld_extra; }
     echo '<script type="application/ld+json">' . json_encode(array('@context' => 'https://schema.org', '@graph' => $graph), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
+    // 再販パートナー募集の枠（中身は kurage_web/partner-bar.js。kurage.exbridge.jp 以外では何も出さない）
+    echo '<script src="https://kurage.exbridge.jp/partner-bar.js" defer></script>';
     echo '</head><body><header><div class="wrap"><a class="brand" href="' . h($SELF) . '/">' . h($SITE) . '</a><nav class="menu">';
     foreach (array('/' => 'ことばで探す', '/assist' => 'アシスト', '/giin' => '提出者から', '/pattern' => '答えていない型', '/data' => 'データ', '/about' => 'このサイトについて') as $u => $t) { echo '<a href="' . h($SELF . $u) . '">' . h($t) . '</a>'; }
     echo '</nav></div></header><main><div class="wrap">';
