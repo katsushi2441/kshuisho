@@ -16,6 +16,11 @@
   /web/kurage_exbridge_jp/kshuisho.php
   /web/kurage_exbridge_jp/kshuisho_data/kshuisho.sqlite … 21MB。.htaccess で直読み禁止
   /web/kurage_exbridge_jp/images/ogp/kshuisho.png     … OGP（kshuisho_data 配下は拒否なので別の場所）
+  /web/kurage_exbridge_jp/kshuisho_config.php         … LLM の設定（中継 :18343 の URL と合言葉）。リポジトリ外
+
+LLM の設定（php/kshuisho_config.php）があれば一緒に送る。
+  --llm-off  … 公開先の kshuisho_config.php を消す（LLM なしの画面に戻す。確かめるとき用）
+  kshuisho_data/kshuisho_llm.sqlite は公開先の PHP が作る（言い換えのキャッシュと回数制限）。送らない・消さない。
 """
 import ftplib
 import os
@@ -39,6 +44,10 @@ FILES = [(f"{ROOT}/php/kshuisho.php", f"{REMOTE}/kshuisho.php"),
          (f"{ROOT}/outputs/kshuisho_ogp.png", f"{REMOTE}/images/ogp/kshuisho.png")]
 if not PHP_ONLY:
     FILES.insert(1, (f"{ROOT}/php/kshuisho_data/kshuisho.sqlite", f"{REMOTE}/kshuisho_data/kshuisho.sqlite"))
+LLM_OFF = "--llm-off" in sys.argv
+CONFIG = f"{ROOT}/php/kshuisho_config.php"
+if os.path.exists(CONFIG) and not LLM_OFF:
+    FILES.append((CONFIG, f"{REMOTE}/kshuisho_config.php"))
 FILES += EXTRA
 
 
@@ -64,6 +73,12 @@ def main() -> int:
         with open(local, "rb") as fh:
             f.storbinary("STOR " + os.path.basename(remote), fh, blocksize=1 << 18)
         print(f"  {remote}  {size/1024:.0f}KB")
+    if LLM_OFF:
+        try:
+            f.delete(f"{REMOTE}/kshuisho_config.php")
+            print(f"  消した {REMOTE}/kshuisho_config.php（LLM なし）")
+        except ftplib.error_perm as e:
+            print(f"  {REMOTE}/kshuisho_config.php は無い（{e}）")
     f.quit()
 
     # 確認は HTTPS（FTP を再接続しない）
@@ -75,12 +90,13 @@ def main() -> int:
                 print(f"  {r.status} {len(body)}B+ {BASE}{path}")
         except Exception as e:
             print(f"  ! {BASE}{path}: {e}")
-    # データが直読みできないことも確認する
-    try:
-        with urllib.request.urlopen(BASE + "/kshuisho_data/kshuisho.sqlite", timeout=60) as r:
-            print(f"  ! SQLite が直接読めてしまう: {r.status}")
-    except urllib.error.HTTPError as e:
-        print(f"  {e.code} SQLite の直読みは拒否されている（想定どおり）")
+    # データが直読みできないことも確かめる
+    for p in ("/kshuisho_data/kshuisho.sqlite", "/kshuisho_data/kshuisho_llm.sqlite"):
+        try:
+            with urllib.request.urlopen(BASE + p, timeout=60) as r:
+                print(f"  ! SQLite が直接読めてしまう: {r.status} {p}")
+        except urllib.error.HTTPError as e:
+            print(f"  {e.code} {p} の直読みは拒否されている（想定どおり）")
     return 0
 
 

@@ -28,6 +28,9 @@ FILES = [
     (ROOT / "scripts" / "fetch_shugiin.py", "scripts/fetch_shugiin.py"),
     (ROOT / "scripts" / "fetch_sangiin.py", "scripts/fetch_sangiin.py"),
     (ROOT / "scripts" / "build_db.py", "scripts/build_db.py"),
+    (ROOT / "scripts" / "build_similar.py", "scripts/build_similar.py"),
+    (ROOT / "scripts" / "test_draft_check.php", "scripts/test_draft_check.php"),
+    (ROOT / "php" / "kshuisho_config.example.php", "kshuisho_config.example.php"),
 ]
 
 BAD = ("kkaigo", "khoudei", "kshuro", "kghome", "訪問介護", "ケアマネ", "放課後等デイ", "グループホーム", "共同生活援助")
