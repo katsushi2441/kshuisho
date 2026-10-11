@@ -531,7 +531,7 @@ function draft_text($o, $src) {
 if ($path === '/robots.txt') { header('Content-Type: text/plain; charset=UTF-8'); echo "User-agent: *\nAllow: /\nSitemap: https://kurage.exbridge.jp{$SELF}/sitemap.xml\n"; exit; }
 if ($path === '/sitemap.xml') {
     header('Content-Type: application/xml; charset=UTF-8'); $base = 'https://kurage.exbridge.jp' . $SELF; $lm = $META['built'] ?? date('Y-m-d');
-    echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.w3.org/1999/xmlns/sitemap/0.9">';
+    echo '<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">';
     foreach (array('/', '/assist', '/giin', '/pattern', '/data', '/about') as $u) { echo '<url><loc>' . h($base . $u) . '</loc><lastmod>' . $lm . '</lastmod></url>'; }
     foreach ($db->query('SELECT id, COALESCE(NULLIF(answer_date, ""), submit_date) d FROM q ORDER BY submit_date DESC') as $r) { echo '<url><loc>' . h($base . '/q/' . $r['id']) . '</loc><lastmod>' . h($r['d'] ?: $lm) . '</lastmod></url>'; }
     foreach ($db->query('SELECT submitter, MAX(submit_date) d FROM q GROUP BY submitter') as $r) { echo '<url><loc>' . h($base . '/giin/' . rawurlencode($r['submitter'])) . '</loc><lastmod>' . h($r['d'] ?: $lm) . '</lastmod></url>'; }
