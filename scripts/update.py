@@ -9,7 +9,7 @@
 
 1. 衆参の一覧を、いま手元にある最新の会期の前後（N-1〜N+1）だけ取り直す（新しい会期が始まれば N+1 で拾う）。
    答弁があとから届いた質問の経過・明細も、ここで取り直す（fetch_*.py 側で対応）
-2. 公開している範囲（第212回〜）で SQLite を作り直す
+2. 公開している範囲（全会期・第1回〜）で SQLite を作り直す
 3. 件数・答弁数・本文の長さが前回と同じなら、ここで終わる（配置しない）
 4. 変わっていれば「似た質問主意書」を増えた分だけ計算し（systemd-run でメモリ上限つき）、heteml に1接続で置き、
    公開ページの件数が合うかを確かめる
@@ -29,7 +29,7 @@ import urllib.request
 ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 DB = os.path.join(ROOT, "php", "kshuisho_data", "kshuisho.sqlite")
 RAW = "/mnt/data/kshuisho/raw"
-FROM_SESSION = 212
+FROM_SESSION = 1   # 2026-10-15 全会期（1947年〜）に広げた
 PY = "/usr/bin/python3"
 VENV = "/home/kojima/work/kronten/.venv/bin/python"
 

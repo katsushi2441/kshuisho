@@ -88,7 +88,7 @@ def wareki(s: str) -> str:
 
 
 def text_lines(raw: str) -> list[str]:
-    s = re.sub(r"(?is)<script.*?</script>|<style.*?</style>", "", raw)
+    s = re.sub(r"(?is)<script.*?</script\s*>|<style.*?</style\s*>", "", raw)   # 古いページに「</SCRIPT >」（空白入り）がある
     s = re.sub(r"(?i)<br\s*/?>|</p>|</div>|</tr>|</td>|</li>|</h\d>", "\n", s)
     s = re.sub(r"<[^>]+>", "", s)
     s = htmlmod.unescape(s).replace("\xa0", " ")
@@ -128,7 +128,7 @@ def shugiin(session_dir: str) -> list[dict]:
             QL = text_lines(open(qp, encoding="utf-8").read())
             if "質問本文情報" in QL:
                 QL = QL[QL.index("質問本文情報") + 1:]
-            body = between(QL, lambda l: l.startswith("提出者"), lambda l: l in ("経過へ",))
+            body = between(QL, lambda l: re.sub(r"[\s　]", "", l).startswith("提出者"), lambda l: l in ("経過へ",))   # 古いページは「提　出　者」
             # 先頭に件名が1回繰り返される
             if body and body[0] == kv.get("質問件名", ""):
                 body = body[1:]
@@ -171,7 +171,7 @@ def sangiin(session_dir: str) -> list[dict]:
         if os.path.exists(qp):
             QL = text_lines(open(qp, encoding="utf-8").read())
             # 「参議院議長　○○　殿」の次に件名がもう一度出て、その後ろが本文。「右質問する。」で終わる
-            i = next((k for k, l in enumerate(QL) if "参議院議長" in l and l.endswith("殿")), None)
+            i = next((k for k, l in enumerate(QL) if re.search(r"参議院副?議長", l) and l.endswith("殿")), None)   # 副議長あてもある
             if i is not None:
                 body = QL[i + 1:]
                 if body and body[0] == kv.get("件名", ""):
