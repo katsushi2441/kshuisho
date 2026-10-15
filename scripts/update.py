@@ -51,8 +51,13 @@ def run(args, **kw):
 
 
 def main() -> int:
+    # 最新の会期＝**一覧のファイルがある**いちばん大きい会期。取得は一覧が無い会期でもフォルダを作るので、
+    # フォルダの番号で決めると毎日1つずつずれて、いまの会期を取り直さなくなる（2026-10-15 試運転で 223・224 ができた）
+    def has_list(h, d):
+        s = int(os.path.basename(d))
+        return os.path.exists(os.path.join(d, f"kaiji{s:03d}_l.htm" if h == "shugiin" else "syuisyo.htm"))
     latest = max(int(os.path.basename(d)) for h in ("shugiin", "sangiin")
-                 for d in glob.glob(os.path.join(RAW, h, "*")) if os.path.basename(d).isdigit())
+                 for d in glob.glob(os.path.join(RAW, h, "*")) if os.path.basename(d).isdigit() and has_list(h, d))
     lo, hi = latest - 1, latest + 1
     log = []
     for fetch in ("fetch_shugiin.py", "fetch_sangiin.py"):
