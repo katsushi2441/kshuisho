@@ -2,7 +2,7 @@
 # -*- coding: utf-8 -*-
 """落とした生HTML（/mnt/data/kshuisho/raw）から php/kshuisho_data/kshuisho.sqlite を作る。
 
-  /usr/bin/python3 scripts/build_db.py
+  /usr/bin/python3 scripts/build_db.py --from-session 212   # 公開中の範囲（第212回〜）
 
 表
   q     … 質問主意書1件（house, session, no, title, submitter, kaiha, submit_date, transfer_date, answer_date,
@@ -206,9 +206,15 @@ def evasive(a_text: str) -> dict:
 
 
 def main() -> int:
+    # 公開しているのは第212回（2023年10月）から。生HTMLは第1回（1947年）から全部あるが、
+    # 全会期に広げるかは決めていないので、--from-session で範囲を指定する（毎日の更新は 212）
+    import argparse
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--from-session", type=int, default=1, help="この会期以降だけを入れる（公開中は 212）")
+    a = ap.parse_args()
     rows = []
     def sess_dirs(house):
-        ds = [d for d in glob.glob(os.path.join(RAW, house, "*")) if os.path.basename(d).isdigit()]
+        ds = [d for d in glob.glob(os.path.join(RAW, house, "*")) if os.path.basename(d).isdigit() and int(os.path.basename(d)) >= a.from_session]
         return sorted(ds, key=lambda d: int(os.path.basename(d)))   # 文字列順だと第10回が第2回より前に来る
     for d in sess_dirs("shugiin"):
         rows += shugiin(d)

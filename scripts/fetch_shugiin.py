@@ -36,6 +36,8 @@ def base_for(session: int) -> str:
 RAW = "/mnt/data/kshuisho/raw/shugiin"
 UA = "kshuisho/1.0 (+https://kurage.exbridge.jp/kshuisho.php/; contact info@exbridge.jp)"
 WAIT = 1.0
+# 提出直後は本文のHTMLが「ＨＴＭＬファイルについては準備中です」の仮ページ（2026-10-15 第222回で実測）
+PENDING = "準備中です"
 
 
 def get(url: str) -> str:
@@ -56,13 +58,19 @@ def fetch_file(session: int, name: str, force: bool = False) -> str | None:
     d = os.path.join(RAW, str(session)); os.makedirs(d, exist_ok=True)
     p = os.path.join(d, name)
     if os.path.exists(p) and not force:
-        return open(p, encoding="utf-8").read()
+        s = open(p, encoding="utf-8").read()
+        if PENDING not in s:
+            return s
     try:
         s = get(base_for(session) + name)
     except urllib.error.HTTPError as e:
         if e.code == 404:
             return None
         raise
+    if PENDING in s:   # 本文のHTMLがまだ「準備中」。保存すると二度と取りに行かないので、残さずに次回また取る
+        if os.path.exists(p):
+            os.remove(p)
+        return None
     open(p, "w", encoding="utf-8").write(s)
     return s
 
@@ -95,7 +103,10 @@ def main() -> int:
         got = 0
         for r in rows:
             base = f"{s:03d}{r['no']:03d}"
-            fetch_file(s, f"{base}.htm")        # 経過
+            # 答弁があとから届いた質問は、経過（答弁の受理日が載る）を取り直す。一度だけ取る作りだと、
+            # 提出直後に取った経過のまま答弁日が空になる（2026-10-15 毎日の更新を入れるときに直した）
+            new_answer = r["has_answer"] and not os.path.exists(os.path.join(RAW, str(s), f"b{base}.htm"))
+            fetch_file(s, f"{base}.htm", force=new_answer)        # 経過
             fetch_file(s, f"a{base}.htm")       # 質問本文
             if r["has_answer"]:
                 fetch_file(s, f"b{base}.htm")   # 答弁本文（無ければ次回）

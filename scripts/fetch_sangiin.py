@@ -71,7 +71,10 @@ def main() -> int:
         nos = sorted({int(m) for m in re.findall(r'meisai/m%03d(\d{3})\.htm' % s, lst)})
         for n in nos:
             base = f"{s:03d}{n:03d}"
-            m = fetch_file(s, f"meisai/m{base}.htm")
+            # 答弁がまだ無い質問は、明細を取り直す。答弁のリンクは明細に出るので、一度だけ取る作りだと
+            # 提出直後に取った明細のまま、あとから届いた答弁を永久に取りに行かない（2026-10-15）
+            no_answer = not os.path.exists(os.path.join(RAW, str(s), "touh", f"t{base}.htm"))
+            m = fetch_file(s, f"meisai/m{base}.htm", force=no_answer)
             if not m:
                 continue
             fetch_file(s, f"syuh/s{base}.htm")
