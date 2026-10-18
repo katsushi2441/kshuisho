@@ -602,12 +602,167 @@ if ($LLM_ON && $path === '/draft') {
     echo json_encode(array('ok' => true, 'html' => $html . '</ol>'), JSON_UNESCAPED_UNICODE); exit;
 }
 
+// ── カード画像（1200×630 PNG）────────────────────────────
+// Xに貼ったとき1件ごと・提出者ごとの中身が見えるように、og:image をページごとに描く（2026-10-18）。
+// 部品は xb4g/giin/lib/card.php と同じ作り（白地・薄緑の円・ティール・濃紺）。フォントは kshuisho_data/fonts/
+// （giin/fonts の Noto Sans CJK を JIS第1・第2水準に絞ったもの。scripts/deploy.py --fonts で送る）。
+// 描いたものは kshuisho_data/cache/ に置く。名前に SQLite の更新時刻を入れるので、データを入れ替えると描き直す。
+// 描き方を変えたら kc_serve の 'v5|' を上げる（上げないと古い画像が出続ける）。
+function kc_fonts() { $d = __DIR__ . '/kshuisho_data/fonts/'; return array($d . 'NotoSansJP-Black-sub.otf', $d . 'NotoSansJP-Bold-sub.otf', $d . 'NotoSansJP-Regular-sub.otf'); }
+function kc_ok() { $f = kc_fonts(); return function_exists('imagettftext') && is_file($f[0]) && is_file($f[1]) && is_file($f[2]); }
+function kc_textw($s, $font, $size) { if ($s === '') return 0; $b1 = imagettfbbox($size, 0, $font, $s . 'あ'); $b2 = imagettfbbox($size, 0, $font, 'あ'); return $b1[2] - $b2[2]; }
+function kc_fit($text, $font, $size, $maxw, $min = 14) { while ($size > $min && kc_textw($text, $font, $size) > $maxw) $size -= 1; return $size; }
+function kc_cut($text, $font, $size, $maxw) { while (kc_textw($text, $font, $size) > $maxw && mb_strlen($text) > 4) $text = mb_substr($text, 0, mb_strlen($text) - 2) . '…'; return $text; }
+/** 字単位で折り返す。行頭に句読点を置かない。入りきらなければ最後の行を「…」で切る */
+function kc_wrap($text, $font, $size, $maxw, $maxLines) {
+    $lines = array(); $cur = '';
+    foreach (preg_split('//u', $text, -1, PREG_SPLIT_NO_EMPTY) ?: array() as $ch) {
+        if ($cur !== '' && kc_textw($cur . $ch, $font, $size) > $maxw && !preg_match('/^[、。）」』，．・ー…]$/u', $ch)) {
+            $lines[] = $cur; $cur = '';
+            if (count($lines) === $maxLines) { $lines[$maxLines - 1] = mb_substr($lines[$maxLines - 1], 0, -1) . '…'; return $lines; }
+        }
+        $cur .= $ch;
+    }
+    if ($cur !== '') $lines[] = $cur;
+    return $lines;
+}
+function kc_canvas() {
+    $W = 1200; $H = 630; $im = imagecreatetruecolor($W, $H); imageantialias($im, true);
+    $c = function ($hex) use ($im) { return imagecolorallocate($im, hexdec(substr($hex, 1, 2)), hexdec(substr($hex, 3, 2)), hexdec(substr($hex, 5, 2))); };
+    $C = array('white' => $c('#ffffff'), 'ink' => $c('#12202f'), 'gray' => $c('#5d6b7a'), 'grayL' => $c('#c9d3dc'), 'teal' => $c('#0a9a8f'), 'tealD' => $c('#0a726b'),
+               'mint' => $c('#e6f4f2'), 'mint2' => $c('#f0f6f6'), 'line' => $c('#bfe3de'), 'navy' => $c('#1f3a5f'), 'navyBg' => $c('#eef2f7'), 'hi' => $c('#c2410c'), 'hiBg' => $c('#fdf1e7'));
+    imagefilledrectangle($im, 0, 0, $W, $H, $C['white']);
+    imagefilledellipse($im, 150, 70, 660, 620, $C['mint']);
+    imagefilledellipse($im, $W - 120, $H - 45, 680, 570, $C['mint2']);
+    return array($im, $C);
+}
+/** 上の帯（左にラベル、右に小さな文字）と下の帯（左に公開URL、右に出典） */
+function kc_frame($im, $C, $tag, $right, $path, $note) {
+    list(, $FM, $FR) = kc_fonts(); $X = 56; $W = 1200; $H = 630;
+    $tw = kc_textw($tag, $FM, 20);
+    imagefilledrectangle($im, $X, 34, $X + $tw + 36, 76, $C['mint']);
+    imagettftext($im, 20, 0, $X + 18, 63, $C['tealD'], $FM, $tag);
+    if ($right !== '') { $room = $W - 2 * $X - $tw - 70; $s = kc_fit($right, $FR, 18, $room, 13); $right = kc_cut($right, $FR, $s, $room); imagettftext($im, $s, 0, $W - $X - kc_textw($right, $FR, $s), 62, $C['gray'], $FR, $right); }
+    $url = 'kurage.exbridge.jp/kshuisho.php' . $path;
+    $us = kc_fit($url, $FR, 17, 640, 12);
+    imagettftext($im, $us, 0, $X, $H - 26, $C['gray'], $FR, $url);
+    $room = $W - 2 * $X - kc_textw($url, $FR, $us) - 30; $ns = kc_fit($note, $FR, 17, $room, 13); $note = kc_cut($note, $FR, $ns, $room);
+    imagettftext($im, $ns, 0, $W - $X - kc_textw($note, $FR, $ns), $H - 26, $C['gray'], $FR, $note);
+}
+/** 枠つきの箱に見出しと本文（折り返し） */
+function kc_box($im, $C, $x, $y, $w, $h, $label, $text, $bg, $edge, $labCol) {
+    list(, $FM, $FR) = kc_fonts();
+    imagefilledrectangle($im, $x, $y, $x + $w, $y + $h, $bg);
+    imagefilledrectangle($im, $x, $y, $x + 6, $y + $h, $edge);
+    imagettftext($im, 17, 0, $x + 24, $y + 34, $labCol, $FM, $label);
+    $lines = kc_wrap($text, $FR, 19, $w - 44, (int)floor(($h - 58) / 32));
+    foreach ($lines as $i => $ln) imagettftext($im, 19, 0, $x + 24, $y + 70 + $i * 32, $C['ink'], $FR, $ln);
+}
+function kc_png($im) { ob_start(); imagepng($im, null, 9); imagedestroy($im); return (string)ob_get_clean(); }
+/** 置いてある画像を返す。無ければ描いて置く。描けなければ共通の画像へ302 */
+function kc_serve($kind, $key, $make) {
+    global $OGP, $DBP;
+    $d = __DIR__ . '/kshuisho_data/cache/' . $kind; if (!is_dir($d)) @mkdir($d, 0755, true);
+    $file = $d . '/' . substr(sha1('v5|' . $key), 0, 20) . '-' . (int)@filemtime($DBP) . '.png';
+    $png = is_file($file) ? (string)file_get_contents($file) : null;
+    if ($png === null && kc_ok()) { $png = $make(); if ($png !== null && is_dir($d)) @file_put_contents($file, $png); }
+    if ($png === null) { header('Location: ' . $OGP, true, 302); exit; }
+    header('Content-Type: image/png'); header('Cache-Control: public, max-age=86400'); echo $png; exit;
+}
+/** 本文の抜き書き（「一について」などの見出しを外し、改行を詰める） */
+function kc_excerpt($s) {
+    $s = preg_replace('/(^|\n)[一二三四五六七八九十百及びからまで並びに、]+について\s*\n/u', '$1', (string)$s);
+    $s = preg_replace('/([。」）])\s*\n\s*/u', '$1', $s);   // 文の終わりの改行は詰める（空白を入れると字が空いて見える）
+    return trim(preg_replace('/[\s　]+/u', ' ', $s));
+}
+function kc_q_card($r) {
+    global $PATTERNS;
+    list($FB, $FM, $FR) = kc_fonts(); list($im, $C) = kc_canvas(); $X = 56;
+    kc_frame($im, $C, '質問主意書', $r['house'] . ' 第' . (int)$r['session'] . '回国会 質問第' . (int)$r['no'] . '号', '/q/' . $r['id'], '出典：' . $r['house'] . 'の質問主意書・答弁書');
+    $ts = mb_strlen($r['title']) > 40 ? 30 : 36;
+    $tl = kc_wrap($r['title'], $FB, $ts, 1200 - 2 * $X, 2);
+    $y = 132; foreach ($tl as $ln) { imagettftext($im, $ts, 0, $X, $y, $C['ink'], $FB, $ln); $y += (int)($ts * 1.5); }
+    $days = ($r['submit_date'] && $r['answer_date']) ? '（' . (int)((strtotime($r['answer_date']) - strtotime($r['submit_date'])) / 86400) . '日）' : '';
+    $who = $r['submitter'] . ($r['kaiha'] ? '（' . $r['kaiha'] . '）' : '') . '　' . jdate($r['submit_date']) . '提出' . ($r['a_text'] ? ' → ' . jdate($r['answer_date']) . '答弁' . $days : '・答弁書はまだ');
+    $ws = kc_fit($who, $FM, 20, 1200 - 2 * $X, 15);
+    imagettftext($im, $ws, 0, $X, $y - 6, $C['tealD'], $FM, kc_cut($who, $FM, $ws, 1200 - 2 * $X));
+    $by = $y + 18; $bh = 548 - $by; $bw = (int)((1200 - 2 * $X - 24) / 2);
+    kc_box($im, $C, $X, $by, $bw, $bh, '質問', kc_excerpt($r['q_text']), $C['navyBg'], $C['navy'], $C['navy']);
+    $ev = ev($r['evasive_json']);
+    $evs = implode('・', array_map(function ($k) use ($PATTERNS, $ev) { return '「' . $PATTERNS[$k][0] . '」×' . (int)$ev[$k]; }, array_keys(array_intersect_key($ev, $PATTERNS))));
+    $ah = $evs !== '' ? $bh - 44 : $bh;
+    kc_box($im, $C, $X + $bw + 24, $by, $bw, $ah, '政府答弁書', $r['a_text'] ? kc_excerpt($r['a_text']) : '答弁書はまだ公開されていません。', $C['mint'], $C['teal'], $C['tealD']);
+    if ($evs !== '') {
+        $ex = $X + $bw + 24; $t = '定型句 ' . $evs; $s = kc_fit($t, $FM, 17, $bw - 30, 13);
+        imagefilledrectangle($im, $ex, $by + $ah + 8, $ex + $bw, $by + $bh, $C['hiBg']);
+        imagettftext($im, $s, 0, $ex + 18, $by + $ah + 34, $C['hi'], $FM, kc_cut($t, $FM, $s, $bw - 30));
+    }
+    return kc_png($im);
+}
+function kc_giin_card($name, $rows) {
+    global $PATTERNS;
+    list($FB, $FM, $FR) = kc_fonts(); list($im, $C) = kc_canvas(); $X = 56;
+    $r0 = $rows[0]; $n = count($rows);
+    $houses = implode('・', array_unique(array_column($rows, 'house')));   // 衆院から参院へ移った人は両方
+    kc_frame($im, $C, '質問主意書', $houses . ($r0['kaiha'] ? '・' . $r0['kaiha'] : ''), '/giin/' . $name, '出典：衆議院・参議院の質問主意書・答弁書');
+    $ns = kc_fit($name, $FB, 54, 620, 30);
+    imagettftext($im, $ns, 0, $X, 158, $C['ink'], $FB, $name);
+    imagettftext($im, 22, 0, $X + kc_textw($name, $FB, $ns) + 14, 158, $C['gray'], $FM, 'の質問主意書');
+    // 大きな数字
+    $years = array(); $ans = 0; $evc = array();
+    foreach ($rows as $r) { $yy = (int)substr((string)$r['submit_date'], 0, 4); if ($yy) $years[$yy] = ($years[$yy] ?? 0) + 1; if ($r['a_text']) $ans++; foreach (ev($r['evasive_json']) as $k => $c) $evc[$k] = ($evc[$k] ?? 0) + 1; }
+    ksort($years); $y1 = $years ? min(array_keys($years)) : 0; $y2 = $years ? max(array_keys($years)) : 0;
+    $big = number_format($n); $bs = 88;
+    imagettftext($im, $bs, 0, $X, 300, $C['tealD'], $FB, $big);
+    imagettftext($im, 30, 0, $X + kc_textw($big, $FB, $bs) + 8, 300, $C['tealD'], $FB, '件');
+    imagettftext($im, 19, 0, $X, 342, $C['gray'], $FR, ($y1 ? ($y1 === $y2 ? $y1 . '年に提出' : $y1 . '〜' . $y2 . '年に提出') : '') . '・答弁書 ' . number_format($ans) . '件');
+    arsort($evc); $et = array(); foreach (array_slice($evc, 0, 1, true) as $k => $c) if (isset($PATTERNS[$k])) $et[] = '「' . $PATTERNS[$k][0] . '」' . $c . '件';
+    if ($et) { $t = '答弁の定型句 ' . $et[0] . (count($evc) > 1 ? ' ほか' . (count($evc) - 1) . '種' : ''); imagettftext($im, 15, 0, $X, 378, $C['hi'], $FM, kc_cut($t, $FM, 15, 580)); }
+    // 年ごとの棒（右）。年が多ければ直近12年
+    $bx = 640; $bw = 1200 - $X - $bx; $byTop = 112; $bh = 250;
+    $span = array(); if ($years) { for ($yy = max($y1, $y2 - 11); $yy <= $y2; $yy++) $span[$yy] = $years[$yy] ?? 0; }
+    $cnt = count($span);
+    if ($cnt) {
+        $max = max(1, max($span)); $gap = $cnt > 8 ? 6 : 12; $w1 = (int)min(70, floor(($bw - $gap * ($cnt - 1)) / $cnt));
+        $x0 = $bx + (int)(($bw - ($w1 * $cnt + $gap * ($cnt - 1))) / 2); $base = $byTop + $bh - 30; $top = $byTop + 26;
+        imageline($im, $bx, $base, $bx + $bw, $base, $C['grayL']);
+        $i = 0;
+        foreach ($span as $yy => $v) {
+            $x1 = $x0 + $i * ($w1 + $gap); $h1 = (int)round(($base - $top) * $v / $max);
+            if ($v > 0) imagefilledrectangle($im, $x1, $base - max(2, $h1), $x1 + $w1, $base - 1, $v === $max ? $C['tealD'] : $C['teal']);
+            $vs = (string)$v; imagettftext($im, 14, 0, $x1 + (int)(($w1 - kc_textw($vs, $FM, 14)) / 2), $base - $h1 - 8, $C['ink'], $FM, $vs);
+            $ls = $cnt > 6 ? "'" . substr((string)$yy, 2) : (string)$yy; imagettftext($im, 14, 0, $x1 + (int)(($w1 - kc_textw($ls, $FR, 14)) / 2), $base + 22, $C['gray'], $FR, $ls);
+            $i++;
+        }
+    }
+    // 最近の件名3つ
+    $y = 420; imagefilledrectangle($im, $X, 400, 1200 - $X, 402, $C['line']);
+    imagettftext($im, 16, 0, $X, $y + 14, $C['gray'], $FM, '最近の質問主意書');
+    foreach (array_slice($rows, 0, 3) as $i => $r) {
+        $d = $r['submit_date'] ? date('Y.n.j', (int)strtotime((string)$r['submit_date'])) : ''; $yy = $y + 48 + $i * 36;
+        imagettftext($im, 17, 0, $X, $yy, $C['gray'], $FR, $d);
+        imagettftext($im, 20, 0, $X + 136, $yy, $C['ink'], $FM, kc_cut($r['title'], $FM, 20, 1200 - 2 * $X - 136));
+    }
+    return kc_png($im);
+}
+if (preg_match('#^/q/((?:shu|san)-\d+-\d+)\.png$#', $path, $m)) {
+    $st = $db->prepare('SELECT * FROM q WHERE id=?'); $st->execute(array($m[1])); $r = $st->fetch();
+    if (!$r) { http_response_code(404); exit; }
+    kc_serve('q', $r['id'], function () use ($r) { return kc_q_card($r); });
+}
+if (preg_match('#^/giin/(.+)\.png$#', $path, $m)) {
+    $st = $db->prepare('SELECT id, house, session, no, title, submitter, kaiha, submit_date, answer_date, evasive_json, a_text FROM q WHERE submitter=? ORDER BY submit_date DESC, no DESC'); $st->execute(array($m[1])); $rows = $st->fetchAll();
+    if (!$rows) { http_response_code(404); exit; }
+    kc_serve('giin', $m[1], function () use ($m, $rows) { return kc_giin_card($m[1], $rows); });
+}
+
 // ── 質問1件 ─────────────────────────────────────────────
 if (preg_match('#^/q/((?:shu|san)-\d+-\d+)$#', $path, $m)) {
     $st = $db->prepare('SELECT * FROM q WHERE id=?'); $st->execute(array($m[1])); $r = $st->fetch();
     if (!$r) { http_response_code(404); head_html('見つかりません｜' . $SITE, '', '/'); echo '<h1>その質問主意書は収録していません</h1>'; foot_html(); exit; }
     $ev = ev($r['evasive_json']);
     $desc = $r['house'] . '第' . $r['session'] . '回国会 質問第' . $r['no'] . '号「' . $r['title'] . '」（' . $r['submitter'] . '、' . jdate($r['submit_date']) . '提出）の質問本文と政府答弁書' . ($r['a_text'] ? '（' . jdate($r['answer_date']) . '受領・' . (int)$r['a_sections'] . '項目' . ($ev ? '・' . implode('、', array_map(function ($k) use ($PATTERNS) { return $PATTERNS[$k][0]; }, array_keys($ev))) : '') . '）' : '（答弁書未受理）') . '。原文のまま。';
+    $OGP = 'https://kurage.exbridge.jp' . $SELF . '/q/' . $r['id'] . '.png';
     head_html($r['title'] . '（' . $r['house'] . '・' . $r['submitter'] . '・' . jdate($r['submit_date']) . '）質問本文と政府答弁書｜' . $SITE, $desc, '/q/' . $r['id']);
     echo '<p class="src"><a href="' . h($SELF) . '/">ことばで探す</a> › ' . h($r['house']) . ' 第' . (int)$r['session'] . '回</p>';
     echo '<h1>' . h($r['title']) . '</h1>';
@@ -645,6 +800,7 @@ if ($path === '/giin') {
 if (preg_match('#^/giin/(.+)$#', $path, $m)) {
     $st = $db->prepare('SELECT id, house, session, no, title, submitter, kaiha, submit_date, answer_date, status, evasive_json, a_len, q_text, a_text FROM q WHERE submitter=? ORDER BY submit_date DESC'); $st->execute(array($m[1])); $rows = $st->fetchAll();
     if (!$rows) { http_response_code(404); head_html('見つかりません｜' . $SITE, '', '/giin'); echo '<h1>その提出者の質問主意書は収録していません</h1>'; foot_html(); exit; }
+    $OGP = 'https://kurage.exbridge.jp' . $SELF . '/giin/' . rawurlencode($m[1]) . '.png';
     head_html($m[1] . 'の質問主意書' . count($rows) . '件と政府答弁書｜' . $SITE, $m[1] . '（' . $rows[0]['house'] . ($rows[0]['kaiha'] ? '・' . $rows[0]['kaiha'] : '') . '）が提出した質問主意書' . count($rows) . '件を、提出日・件名・答弁の型つきで並べました。', '/giin/' . rawurlencode($m[1]));
     echo '<h1>' . h($m[1]) . 'の質問主意書</h1><p class="lead">' . h($rows[0]['house']) . ($rows[0]['kaiha'] ? '・' . h($rows[0]['kaiha']) : '') . '。' . n(count($rows)) . '件。新しい順。</p>';
     narrow_form(array('giin' => $m[1]), $m[1] . 'の質問主意書の中を、ことばで探す');

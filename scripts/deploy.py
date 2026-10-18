@@ -16,6 +16,7 @@
   /web/kurage_exbridge_jp/kshuisho.php
   /web/kurage_exbridge_jp/kshuisho_data/kshuisho.sqlite … 21MB。.htaccess で直読み禁止
   /web/kurage_exbridge_jp/images/ogp/kshuisho.png     … OGP（kshuisho_data 配下は拒否なので別の場所）
+  /web/kurage_exbridge_jp/kshuisho_data/fonts/      … カード画像（/q/<id>.png・/giin/<名前>.png）のフォント。--fonts で送る
   /web/kurage_exbridge_jp/kshuisho_config.php         … LLM の設定（中継 :18343 の URL と合言葉）。リポジトリ外
 
 LLM の設定（php/kshuisho_config.php）があれば一緒に送る。
@@ -48,6 +49,10 @@ LLM_OFF = "--llm-off" in sys.argv
 CONFIG = f"{ROOT}/php/kshuisho_config.php"
 if os.path.exists(CONFIG) and not LLM_OFF:
     FILES.append((CONFIG, f"{REMOTE}/kshuisho_config.php"))
+# カード画像のフォント（xb4g/giin/fonts と同じもの。13MB なので --fonts のときだけ送る）
+if "--fonts" in sys.argv:
+    for n in ("Black", "Bold", "Regular"):
+        FILES.append((f"/home/kojima/work/xb4g/giin/fonts/NotoSansJP-{n}-sub.otf", f"{REMOTE}/kshuisho_data/fonts/NotoSansJP-{n}-sub.otf"))
 FILES += EXTRA
 
 
@@ -82,7 +87,8 @@ def main() -> int:
     f.quit()
 
     # 確認は HTTPS（FTP を再接続しない）
-    for path in ("/kshuisho.php/", "/kshuisho.php/assist", "/kshuisho.php/giin", "/kshuisho.php/about", "/images/ogp/kshuisho.png"):
+    for path in ("/kshuisho.php/", "/kshuisho.php/assist", "/kshuisho.php/giin", "/kshuisho.php/about", "/images/ogp/kshuisho.png",
+                 "/kshuisho.php/q/shu-212-141.png"):
         req = urllib.request.Request(BASE + path, headers={"User-Agent": "kshuisho-deploy/1.0"})
         try:
             with urllib.request.urlopen(req, timeout=90) as r:
