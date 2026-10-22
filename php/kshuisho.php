@@ -131,7 +131,7 @@ function head_html($title, $desc, $canon, $ld_extra = null) {
     echo '<style>'
        . ':root{--ink:#12202f;--mut:#5d6b7a;--teal:#0a9a8f;--teal-d:#087f76;--line:#dfe7ec;--bg:#f5f8fa;--red-l:#fdecea;--amber-l:#fdf6e3;--blue:#2c6fbb;--blue-l:#eaf2fb}'
        . '*{box-sizing:border-box}body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.85 "Noto Sans JP",system-ui,sans-serif}a{color:var(--teal-d)}.wrap{width:min(960px,100% - 32px);margin:0 auto}'
-       . 'header{background:#fff;border-bottom:1px solid var(--line)}.brand{display:block;padding:14px 0 6px;font-weight:800;font-size:18px;text-decoration:none;color:var(--ink)}'
+       . 'header{background:#fff;border-bottom:1px solid var(--line)}.brand{display:flex;align-items:center;gap:8px;padding:14px 0 6px;font-weight:800;font-size:18px;text-decoration:none;color:var(--ink)}.brand img{flex:none;width:30px;height:34px;object-fit:contain}'
        . '.menu{display:flex;gap:14px;flex-wrap:wrap;padding-bottom:12px;font-size:14px}.menu a{text-decoration:none;color:var(--mut)}'
        . 'main{padding:22px 0 40px}h1{font-size:25px;line-height:1.4;margin:0 0 10px}h2{font-size:20px;margin:26px 0 10px}h3{font-size:16px;margin:18px 0 8px}.lead{color:var(--mut)}'
        . '.panel{background:#fff;border:1px solid var(--line);border-radius:14px;padding:18px;margin:14px 0;min-width:0}'
@@ -170,7 +170,7 @@ function head_html($title, $desc, $canon, $ld_extra = null) {
     echo '<script type="application/ld+json">' . json_encode(array('@context' => 'https://schema.org', '@graph' => $graph), JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) . '</script>';
     // 再販パートナー募集の枠（中身は kurage_web/partner-bar.js）。当社の公開先でだけ読む（配布版を置いたサイトからは当社へ通信しない）
     if (($_SERVER['HTTP_HOST'] ?? '') === 'kurage.exbridge.jp') echo '<script src="https://kurage.exbridge.jp/partner-bar.js" defer></script>';
-    echo '</head><body><header><div class="wrap"><a class="brand" href="' . h($SELF) . '/">' . h($SITE) . '</a><nav class="menu">';
+    echo '</head><body><header><div class="wrap"><a class="brand" href="' . h($SELF) . '/"><img src="/images/kurage-mascot-cutout-300.webp" width="30" height="34" alt="Kurage">' . h($SITE) . '</a><nav class="menu">';
     foreach (array('/' => 'ことばで探す', '/assist' => 'アシスト', '/giin' => '提出者から', '/pattern' => '答えていない型', '/data' => 'データ', '/about' => 'このサイトについて') as $u => $t) { echo '<a href="' . h($SELF . $u) . '">' . h($t) . '</a>'; }
     echo '</nav></div></header><main><div class="wrap">';
 }
@@ -607,7 +607,7 @@ if ($LLM_ON && $path === '/draft') {
 // 部品は xb4g/giin/lib/card.php と同じ作り（白地・薄緑の円・ティール・濃紺）。フォントは kshuisho_data/fonts/
 // （giin/fonts の Noto Sans CJK を JIS第1・第2水準に絞ったもの。scripts/deploy.py --fonts で送る）。
 // 描いたものは kshuisho_data/cache/ に置く。名前に SQLite の更新時刻を入れるので、データを入れ替えると描き直す。
-// 描き方を変えたら kc_serve の 'v5|' を上げる（上げないと古い画像が出続ける）。
+// 描き方を変えたら kc_serve の 'v6|' を上げる（上げないと古い画像が出続ける）。
 function kc_fonts() { $d = __DIR__ . '/kshuisho_data/fonts/'; return array($d . 'NotoSansJP-Black-sub.otf', $d . 'NotoSansJP-Bold-sub.otf', $d . 'NotoSansJP-Regular-sub.otf'); }
 function kc_ok() { $f = kc_fonts(); return function_exists('imagettftext') && is_file($f[0]) && is_file($f[1]) && is_file($f[2]); }
 function kc_textw($s, $font, $size) { if ($s === '') return 0; $b1 = imagettfbbox($size, 0, $font, $s . 'あ'); $b2 = imagettfbbox($size, 0, $font, 'あ'); return $b1[2] - $b2[2]; }
@@ -643,10 +643,22 @@ function kc_frame($im, $C, $tag, $right, $path, $note) {
     imagefilledrectangle($im, $X, 34, $X + $tw + 36, 76, $C['mint']);
     imagettftext($im, 20, 0, $X + 18, 63, $C['tealD'], $FM, $tag);
     if ($right !== '') { $room = $W - 2 * $X - $tw - 70; $s = kc_fit($right, $FR, 18, $room, 13); $right = kc_cut($right, $FR, $s, $room); imagettftext($im, $s, 0, $W - $X - kc_textw($right, $FR, $s), 62, $C['gray'], $FR, $right); }
+    // 左下に Kurage のマスコット（縦横比そのまま）と製品名（2026-10-22 ユーザー指示「Kurage のブランディング」）
+    $x = $X; $mp = __DIR__ . '/images/kurage-mascot-cutout.png';
+    if (is_file($mp) && ($m = @imagecreatefrompng($mp))) {
+        $mh = 46; $mw = (int)round(imagesx($m) * $mh / imagesy($m));
+        imagealphablending($im, true);
+        imagecopyresampled($im, $m, $x, $H - 14 - $mh, 0, 0, $mw, $mh, imagesx($m), imagesy($m)); imagedestroy($m);
+        $x += $mw + 8;
+    }
+    $brand = 'Kurage 質問主意書アシスト';
+    imagettftext($im, 16, 0, $x, $H - 26, $C['tealD'], $FM, $brand);
+    $x += kc_textw($brand, $FM, 16) + 14;
     $url = 'kurage.exbridge.jp/kshuisho.php' . $path;
-    $us = kc_fit($url, $FR, 17, 640, 12);
-    imagettftext($im, $us, 0, $X, $H - 26, $C['gray'], $FR, $url);
-    $room = $W - 2 * $X - kc_textw($url, $FR, $us) - 30; $ns = kc_fit($note, $FR, 17, $room, 13); $note = kc_cut($note, $FR, $ns, $room);
+    $us = kc_fit($url, $FR, 15, 440 - ($x - $X), 12);
+    imagettftext($im, $us, 0, $x, $H - 26, $C['gray'], $FR, $url);
+    $x += kc_textw($url, $FR, $us);
+    $room = $W - $X - $x - 30; $ns = kc_fit($note, $FR, 17, $room, 13); $note = kc_cut($note, $FR, $ns, $room);
     imagettftext($im, $ns, 0, $W - $X - kc_textw($note, $FR, $ns), $H - 26, $C['gray'], $FR, $note);
 }
 /** 枠つきの箱に見出しと本文（折り返し） */
@@ -663,7 +675,7 @@ function kc_png($im) { ob_start(); imagepng($im, null, 9); imagedestroy($im); re
 function kc_serve($kind, $key, $make) {
     global $OGP, $DBP;
     $d = __DIR__ . '/kshuisho_data/cache/' . $kind; if (!is_dir($d)) @mkdir($d, 0755, true);
-    $file = $d . '/' . substr(sha1('v5|' . $key), 0, 20) . '-' . (int)@filemtime($DBP) . '.png';
+    $file = $d . '/' . substr(sha1('v6|' . $key), 0, 20) . '-' . (int)@filemtime($DBP) . '.png';
     $png = is_file($file) ? (string)file_get_contents($file) : null;
     if ($png === null && kc_ok()) { $png = $make(); if ($png !== null && is_dir($d)) @file_put_contents($file, $png); }
     if ($png === null) { header('Location: ' . $OGP, true, 302); exit; }
