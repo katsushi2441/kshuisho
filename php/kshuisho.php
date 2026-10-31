@@ -75,6 +75,8 @@ $path = $path === '/' ? '' : $path;
 
 // ── 検索 ───────────────────────────────────────────────
 function terms($q) { $q = trim(preg_replace('/[\s　]+/u', ' ', (string)$q)); return $q === '' ? array() : array_slice(array_unique(explode(' ', $q)), 0, 5); }
+/** ことばの表記ゆれ。質問主意書・答弁書は英字・数字が全角（「ＭＭＴ」「ＧＤＰ」）なので、半角で入れても全角でも探す（逆も）。2026-10-31 */
+function forms($t) { return array_values(array_unique(array_filter(array($t, mb_convert_kana($t, 'A', 'UTF-8'), mb_convert_kana($t, 'a', 'UTF-8')), function ($x) { return $x !== ''; }))); }
 
 /** 絞り込み条件を $_GET から。値は必ずここで検めてから SQL に渡す。 */
 function get_filters() {
@@ -101,7 +103,11 @@ function filter_qs($f, $q = null) {
 function search($db, $q, $limit = 200, $f = null) {
     $ts = terms($q); $f = $f ?: array('house' => '', 'session' => 0, 'giin' => '', 'pat' => '', 'ans' => '');
     $w = array(); $a = array();
-    foreach ($ts as $t) { $w[] = '(title LIKE ? OR q_text LIKE ? OR a_text LIKE ?)'; $a[] = "%$t%"; $a[] = "%$t%"; $a[] = "%$t%"; }
+    foreach ($ts as $t) {   // 1語の中は表記ゆれ（forms）を OR、語どうしは AND
+        $ors = array();
+        foreach (forms($t) as $x) { $ors[] = '(title LIKE ? OR q_text LIKE ? OR a_text LIKE ?)'; $a[] = "%$x%"; $a[] = "%$x%"; $a[] = "%$x%"; }
+        $w[] = '(' . implode(' OR ', $ors) . ')';
+    }
     if ($f['house'])        { $w[] = 'house = ?';            $a[] = $f['house']; }
     if ($f['session'])      { $w[] = 'session = ?';          $a[] = (int)$f['session']; }
     if ($f['giin'] !== '')  { $w[] = 'submitter LIKE ?';     $a[] = '%' . $f['giin'] . '%'; }
@@ -113,10 +119,10 @@ function search($db, $q, $limit = 200, $f = null) {
 }
 function snippet($text, $ts, $width = 110) {
     $text = preg_replace('/\s+/u', ' ', (string)$text);
-    foreach ($ts as $t) { $p = mb_strpos($text, $t); if ($p !== false) { $s = max(0, $p - (int)($width / 3)); $sn = mb_substr($text, $s, $width); return ($s > 0 ? '…' : '') . h($sn) . '…'; } }
+    foreach ($ts as $t) { foreach (forms($t) as $x) { $p = mb_strpos($text, $x); if ($p !== false) { $s = max(0, $p - (int)($width / 3)); $sn = mb_substr($text, $s, $width); return ($s > 0 ? '…' : '') . h($sn) . '…'; } } }
     return h(mb_substr($text, 0, $width)) . '…';
 }
-function mark($html, $ts) { foreach ($ts as $t) { $html = str_replace(h($t), '<mark>' . h($t) . '</mark>', $html); } return $html; }
+function mark($html, $ts) { foreach ($ts as $t) { foreach (forms($t) as $x) { $html = str_replace(h($x), '<mark>' . h($x) . '</mark>', $html); } } return $html; }
 
 // ── 画面の部品 ─────────────────────────────────────────
 function head_html($title, $desc, $canon, $ld_extra = null) {
