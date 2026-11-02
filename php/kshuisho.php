@@ -180,11 +180,38 @@ function head_html($title, $desc, $canon, $ld_extra = null) {
     foreach (array('/' => 'ことばで探す', '/assist' => 'アシスト', '/giin' => '提出者から', '/pattern' => '答えていない型', '/data' => 'データ', '/about' => 'このサイトについて') as $u => $t) { echo '<a href="' . h($SELF . $u) . '">' . h($t) . '</a>'; }
     echo '</nav></div></header><main><div class="wrap">';
 }
+// 「エクスブリッジについて」の欄（正本は kurage_web/exbridge-about.html。文言・数字はそちらを直してから写す）。
+// 当社のサイト（kurage.exbridge.jp・proto.exbridge.jp・exbridge.jp。www. 付きも可）で動いているときだけ出す。
+// お客さまが自社に置いた版には、当社の会社概要を出さない。
+function exb_about_html() {
+    $host = strtolower(isset($_SERVER['HTTP_HOST']) ? (string)$_SERVER['HTTP_HOST'] : '');
+    $host = (string)preg_replace('/:\d+$/', '', $host);
+    if (strpos($host, 'www.') === 0) $host = substr($host, 4);
+    if (!in_array($host, array('kurage.exbridge.jp', 'proto.exbridge.jp', 'exbridge.jp'), true)) return '';
+    return <<<'EXB_ABOUT'
+<section class="exb-about" style="max-width:1080px;margin:32px auto 0;padding:18px 16px 8px;border-top:1px solid #d6dde3;font-size:13.5px;line-height:1.75;color:#33414d;background:transparent;box-sizing:border-box;text-align:left">
+  <h2 style="font-size:15px;line-height:1.5;margin:0 0 6px;color:#1f2d38;font-weight:700">エクスブリッジについて</h2>
+  <p style="margin:0 0 8px">このページは、名古屋のシステム開発会社・株式会社エクスブリッジが運営しています。AIを使って中小企業の業務システムを作り、保守契約・月額のシステム利用料・要件定義なしで使える買い切りの業務システムを <a href="https://kappstore.exbridge.jp/#ref=exb-about-kshuisho">Kurage App Store</a> で販売しています。</p>
+  <dl style="display:grid;grid-template-columns:auto 1fr;gap:2px 12px;margin:0 0 8px">
+    <dt style="font-weight:700">会社名</dt><dd style="margin:0">株式会社エクスブリッジ（EXBRIDGE, Inc.）</dd>
+    <dt style="font-weight:700">所在地</dt><dd style="margin:0">愛知県名古屋市瑞穂区内浜町34-9 305</dd>
+    <dt style="font-weight:700">設立</dt><dd style="margin:0">2004年4月</dd>
+    <dt style="font-weight:700">資本金</dt><dd style="margin:0">1億250万円</dd>
+    <dt style="font-weight:700">代表取締役</dt><dd style="margin:0">小嶋 篤</dd>
+    <dt style="font-weight:700">法人番号</dt><dd style="margin:0">4180001056508</dd>
+    <dt style="font-weight:700">事業</dt><dd style="margin:0">AIを使った業務システムの開発、Kurage App Store の運営、AI-IT顧問</dd>
+  </dl>
+  <p style="margin:0"><a href="https://exbridge.jp/profile.html#ref=exb-about-kshuisho">会社概要</a>　<a href="https://exbridge.jp/vibeblog/2026-11-03-exbridge-yameta-3tsu-hoshu-getsugaku-youken.html#ref=exb-about-kshuisho">エクスブリッジがやめた3つ</a>　<a href="https://exbridge.jp/ai-it-komon.html#ref=exb-about-kshuisho">AI-IT顧問</a>　<a href="https://exbridge.jp/contact.php#ref=exb-about-kshuisho">お問い合わせ</a></p>
+</section>
+EXB_ABOUT;
+}
+
 function foot_html() {
     global $SELF, $META, $STORE;
     echo '</div></main><footer><div class="wrap">';
     echo '<p class="src">出典: <a href="' . h($META['source_shugiin'] ?? '') . '" rel="nofollow">衆議院 質問答弁情報</a>・<a href="' . h($META['source_sangiin'] ?? '') . '" rel="nofollow">参議院 質問主意書</a>の公開ページから機械的に抜き出したもの（第' . h(implode('・', json_decode($META['sessions'] ?? '[]', true) ?: array())) . '回国会、' . n($META['count'] ?? 0) . '件、' . h($META['built'] ?? '') . '集計）。本文は原文のまま、要約も論評もしていません。</p>';
     echo '<p class="src">提供: <a href="https://exbridge.jp/">株式会社エクスブリッジ</a>（名古屋市）／<a href="' . h($STORE) . '">オンプレミス版</a>（議員事務所の中で、相談記録と一緒に動かす版）もあります。</p>';
+    echo exb_about_html();
     echo '</div></footer></body></html>';
 }
 function search_form($q = '', $action = '/search', $ph = 'ことばで探す（例: 遺族年金 養育費、土砂災害 警戒区域）') {
